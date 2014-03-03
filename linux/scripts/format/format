@@ -1,0 +1,336 @@
+#!/bin/bash 
+#Author:Kyle
+#Function: number system conversion
+
+#global variables 
+enable_debug="yes"
+ 
+regex_bin="[0-1]\>"
+regex_oct="[0-7]\>"
+regex_dec="[0-9]\>"
+regex_hex="[0-9a-fA-F]\>"
+
+f_hex="hex"
+f_oct="oct"
+f_bin="bin"
+f_dec="dec"
+
+t_bin="bin"
+t_dec="dec"
+t_oct="oct"
+t_hex="hex"
+
+d2b_out=""
+d2h_out=""
+d2o_out=""
+b2d_out=""
+dec_out=""
+
+opt_dec="no"
+opt_hex="no"
+opt_bin="no"
+opt_oct="no"
+opt_all="yes"
+
+val_in="" 
+val_type=""
+
+function print_help(){
+   echo "format: [-abdox] NUMBER"
+   echo "OPTIONS"
+   echo "-a    print all format number"
+   echo "-b    print binary number"
+   echo "-d    print decimal number"
+   echo "-o    print octal number"
+   echo "-x    print hexadecimal number"
+   echo ""
+   echo "NUMBER"
+   echo "      binary       b1001, B1001; "
+   echo "      decimal      1234;  which withou any format string"
+   echo "      octal        0123;  which start with '0'"
+   echo "      hexadecimal  0x12f, 0XABCD;"
+   echo " "      
+}
+
+function usage(){
+   print_help
+}
+
+function debug_log(){
+   if [  $enable_debug = "yes" ] ; then 
+      echo $@   
+   fi
+}
+
+function handle_options(){
+   if [ $# -eq 0 ]; then 
+       print_help 
+       exit 1
+   fi    
+
+   if [ $# -lt 2 ]; then 
+       val_in=$1
+       return 0
+   fi 
+
+   opt_all="no"
+   while getopts :abdox OPTION
+   do 
+      case $OPTION in 
+         a)opt_all="yes" 
+           ;;
+         b)opt_bin="yes" 
+           ;; 
+         d)opt_dec="yes"
+           ;; 
+         o)opt_oct="yes" 
+           ;; 
+         x)opt_hex="yes" 
+           ;; 
+         h)
+          usage 
+           ;; 
+         \?)usage 
+           ;; 
+      esac   
+   done          
+ 
+   val_in="$2"
+}
+
+function formatout(){
+   formatstring=$1
+   print_value=$2
+   echo "formatstring: $print_value"
+}
+
+function print_valid_result(){
+  if [ -z $1 ] ; then 
+     echo "no"    
+  else 
+     echo "yes" 
+  fi      
+}
+function valid_bin(){
+   bin_grep_value=`echo $1 | grep $regex_bin`
+   print_valid_result $bin_grep_value
+}
+
+function valid_dec(){
+   dec_grep_value=`echo $1 | grep $regex_dec`
+   print_valid_result $dec_grep_value
+}
+
+function valid_oct(){
+    oct_grep_value=`echo $1 | grep $regex_oct`
+    print_valid_result $oct_grep_value 
+}
+
+function valid_hex(){
+   grep_value=`echo $1 | grep "$regex_hex"`
+   print_valid_result $grep_value 
+}
+
+function valid_format(){
+  fstring=$1
+  val=$2
+   
+  echo valid_format
+  valid_function=""  
+  
+  case $fstring in 
+  $f_bin)##
+         valid_function=valid_bin 
+         ;; 
+  $f_dec)##
+         valid_function=valid_dec 
+         ;;
+  $f_oct)##
+         valid_function=valid_oct
+         ;; 
+  $f_hex)##
+         valid_function=valid_hex       
+         ;;   
+   \?)##
+        echo "Error format string."     
+        ;; 
+  esac 
+
+  vf_result=`$valid_function $val` 
+  echo $vf_result
+} 
+
+function bin2dec(){
+  b2d_in=$1  
+  weight="1" 
+  b2d_out="0"
+  echo $b2d_in 
+  while [ "$b2d_in" -gt "0" ] 
+  do 
+     bit_value=`expr $b2d_in % 2` 
+     tmp_value=`expr $bit_value \* $weight`
+     b2d_out=`expr $b2d_out + $tmp_value`
+     weight=`expr $weight \* 2`  
+     b2d_in=`expr $b2d_in / 10`
+  done 
+  
+  echo $b2d_out
+}
+
+function dec2bin(){
+    in_value=`expr $1`
+    mod_value=0
+    out_value=0
+    count=0
+
+    while [ $in_value -gt 0 ]
+    do 
+        count=`expr $count + 1`  
+        mod_value=`expr $in_value % 2` 
+        in_value=`expr $in_value / 2`
+        flag=`expr $count % 4`
+        field=""
+        if [ $flag -eq 0 ]; then 
+            field=" "
+        fi  
+  
+        d2b_out="$field$mod_value$d2b_out"
+     done 
+    
+    echo $d2b_out
+}
+
+function dec2oct(){
+    d2o_in=$1 
+    d2o_out=`printf "%o" $d2o_in`
+    echo "$d2o_out"
+}
+
+function dec2hex(){
+   d2h_in=$1
+   d2h_out=`printf "%x" $d2h_in`
+   echo "$d2h_out"
+}
+
+function error_number(){
+   echo "Error number"
+   exit 1
+}
+
+function judge_type(){
+   jt_val=$1
+  
+   if [ "$jt_val" = "0" ]; then 
+      val_type=$t_dec 
+      return 0 
+   fi 
+ 
+   jt_grep=`echo $jt_val | grep "^0[xX]"`
+   if [ ! -z $jt_grep ]; then 
+      hex_tmp_val=`echo $jt_val | sed 's/^0[xX]//'`
+      if [ `valid_hex $hex_tmp_val` = "yes" ]; then 
+         val_type=$t_hex
+         return 0 
+      else 
+         error_number   
+      fi       
+   fi
+    
+   jt_grep=`echo $jt_val | grep "^0"`   
+   if [ ! -z $jt_grep ]; then 
+      oct_tmp_val=`echo $jt_val | sed 's/^0//'` 
+      if [ `valid_oct $oct_tmp_val` = "yes" ]; then 
+          val_type=$t_oct 
+          return 0 
+      else 
+          error_number
+      fi 
+   fi 
+
+   jt_grep=`echo $jt_val | grep "^[bB]"`
+   if [ ! -z $jt_grep ]; then 
+      bin_tmp_val=`echo $jt_val | sed 's/^[bB]//'`
+      if [ `valid_bin $bin_tmp_val` = "yes" ]; then 
+          val_type=$t_bin 
+          return 0
+      else 
+          error_number
+      fi 
+   fi
+
+  jt_grep=`echo $jt_val | grep "^[1-9]"`
+  if [ ! -z $jt_grep ]; then 
+      dec_tmp_val=$jt_val 
+      if [ `valid_dec $jt_val` = "yes" ]; then 
+          val_type=$t_dec 
+          return 0 
+      else 
+          error_number 
+      fi 
+  fi 
+
+  echo "Error: bad number format"
+  usage 
+  exit 2  
+}
+
+#input value like: 0123, 0x100, b101, 1234 
+function handle_format()
+{
+   hf_in=$1 
+   hf_common_dec=$hf_in   
+  if [ "$val_type" = "$t_bin" ] ; then 
+       hf_in=`echo $hf_in | sed 's/^[bB]//'`
+       hf_common_dec=`bin2dec $hf_in`
+  elif [ "$val_type" = "$t_oct" -o "$val_type" = "$t_hex" ]; then 
+       hf_common_dec=`printf "%d" $hf_in`
+  else 
+       hf_common_dec=$1
+  fi  
+
+  dec_out_value=$hf_common_dec 
+  bin_out_value=`dec2bin $hf_common_dec`
+  oct_out_value=`dec2oct "$hf_common_dec"`
+  hex_out_value=`dec2hex "$hf_common_dec"`
+
+  if [ $opt_all = "yes" -o $opt_dec = "yes" ]; then  
+      format_out $f_dec "$dec_out_value" 
+  fi 
+ 
+  if [ $opt_all = "yes" -o $opt_bin = "yes" ]; then  
+     format_out $f_bin "$bin_out_value"
+  fi 
+ 
+  if [ $opt_all = "yes" -o $opt_oct = "yes" ]; then  
+     format_out $f_oct "$oct_out_value" 
+  fi 
+  
+  if [ $opt_all = "yes" -o $opt_hex = "yes" ]; then 
+     format_out $f_hex "$hex_out_value" 
+  fi 
+}
+
+function format_out(){
+    case $1 in 
+      $f_dec)prompt="Dec:" 
+             format_out_val=$2
+             ;; 
+      $f_bin)prompt="Bin:"
+             format_out_val=$2 
+             ;; 
+      $f_oct)prompt="Oct:"
+             format_out_val="0"$2 
+             ;; 
+      $f_hex)prompt="Hex:" 
+             format_out_val="0x"$2
+             ;; 
+    esac
+    
+    echo "$prompt $format_out_val" 
+}
+
+#start of shell 
+value=$1
+handle_options "$@"
+judge_type $val_in 
+handle_format $val_in 

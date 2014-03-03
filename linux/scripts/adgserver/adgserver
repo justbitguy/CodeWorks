@@ -1,0 +1,500 @@
+#!/bin/bash
+#Function: as affinic debugger gui server.
+#Modified date: 2014-01-2013
+#Author: zhangjw@ucweb.com(Kyle)
+
+VERSION="6.1"
+
+# global flag for function d_print. 
+# manually modified to "YES" when deubgging.
+ENABLE_DEBUG="NO"
+
+# global flags for debug 
+USAGE="usage: `basename $0` package [-c] [-t pkgtype]"
+USECMD=false
+PKGTYPE=""
+TYPE_COUNT=0
+OPTION_HELP="no"
+
+# global vars for android debug 
+MANIFEST="AndroidManifest.xml" 
+
+pid_for_program()
+{
+   pack_name=$1
+   _pid=`adb shell ps | awk -v PACKAGE="$pack_name" '
+   BEGIN {
+       FS=" "
+   
+       if (PACKAGE == "") {
+           PACKAGE="com.google.android.apps.maps"
+       }
+   
+       PID=0
+       PID_COLUMN=2
+    }
+
+    {
+       gsub("\r","",$NF)
+       if (NR == 1) {
+           for (n = 1; n <= NF; n++) {
+               if ($n == "PID") {
+                   PID_COLUMN=n;
+               }
+           }
+       } else {
+       if ($NF == PACKAGE) {
+           PID=$PID_COLUMN
+           }
+       }
+    }
+
+   END {
+       print PID 
+   }
+   '` 
+   echo $_pid
+}
+
+# run command with log
+run ()
+{
+  echo "adb cmd: $@"
+  "$@" > /dev/null 2>&1 
+}
+
+# print log when debug 
+function d_print(){
+   if [ "$ENABLE_DEBUG" = "YES" ]; then 
+      echo "##d_out:$@"
+   fi  
+}
+
+# judge current directory is a android root directory 
+function  check_in_android_directory(){
+   is_android_dir="no" 
+   if [ -f AndroidManifest.xml ]; then 
+      if [ -d bin -a -d libs ]; then  
+         is_android_dir="yes" 
+      fi 
+   fi 
+   
+   if [ $is_android_dir = "no" ]; then 
+      echo "not in a andorid directory." 
+      exit 4  
+   fi 
+}
+
+#^^ get package name from AndroidManifest.xml 
+function package_name()
+{
+   if [ -f $MANIFEST ]; then 
+      package_name=`cat AndroidManifest.xml | grep package= | sed 's/.*="//' | sed 's/"//'`
+   fi 
+
+   if [ -z $package_name ]; then 
+      echo "can not get package name from $MANIFEST."
+   fi 
+   
+   echo $package_name
+}
+#$$ package_name
+
+#^^ get activity name from AndroidManifest.xml
+function activity_name()
+{
+    ### get Activity from manifest.
+    ## print the first line number with "<activity"
+    Activity_flag_line=`cat $MANIFEST | sed -n '/<activity/=' | sed -n '1p'`
+    ## the 1st line with "android:name" after the 1st line with "<activity" contains the application activity name. 
+    activity_name=`cat $MANIFEST | sed -n "$Activity_flag_line, /android:name/p" | grep android:name | sed 's/^.*="//' | sed 's/"//'`
+    echo $activity_name 
+}
+#$$ activity_name
+
+#^^ get apk name from .project
+function apk_name(){
+   APK_NAME=`cat .project | sed -n '/name/'p | sed -n '1p' | sed 's/<name>//' | sed 's/<.*$//' | awk '{print $1}'`
+   APK_NAME="$APK_NAME".apk 
+   echo "$APK_NAME" 
+}
+
+###
+#^ start of this script
+#
+## process options 
+while [ $# -gt 0 ]
+do 
+  case $1 in 
+  -c)# 
+     USECMD=true
+     shift
+     ;;
+  -t)# 
+     if [ $TYPE_COUNT -ne 0 ]; then
+        echo $USAGE
+        exit 2
+     elif [ $2 = "ac" -o $2 = "normal" ]; then 
+        PKGTYPE=$2 
+        TYPE_COUNT=`expr $TYPE_COUNT + 1`
+        echo "$PKGTYPE package"
+        shift
+        shift
+     else
+        echo "#error: $2 is a wrong package type!"
+        exit 2
+     fi 
+     ;;
+   -a)#
+     if [ $TYPE_COUNT -eq 0 ]; then
+       echo "AC package" PKGTYPE=ac
+       TYPE_COUNT=`expr $TYPE_COUNT + 1`
+       shift
+     else
+       echo $USAGE
+       exit 2
+     fi
+     ;;
+   -f)#
+     echo force restart adg.
+     shift
+     FORCE_RESTART_ADG=1
+     ;;
+   -n)#
+     if [ $TYPE_COUNT -eq 0 ]; then 
+        echo "Normal package"
+        PKGTYPE=normal
+        TYPE_COUNT=`expr $TYPE_COUNT + 1`
+        shift
+     else 
+        echo $USAGE
+        exit 2
+     fi
+     ;;
+   -v)#
+     echo "`basename $0` $VERSION"
+     exit 0
+     shift
+     ;;
+   -h)#
+     OPTION_HELP="yes"
+     shift      
+     ;;
+  *)#
+     STR=`echo $1 | grep "^com.*"`
+     if [ ! -z $STR ]; then 
+        package=$1
+        shift
+     else
+	echo $USAGE
+        echo "#error: package should like com.XXX..."
+        exit 3
+     fi
+     ;;
+  esac
+done
+
+## print help 
+PROGNAME=x-gdb
+if [ "$OPTION_HELP" = "yes" ] ; then 
+    echo "Usage: $PROGNAME [options] [pakcage]"
+    echo ""
+    echo "Valid options:"
+    echo ""
+    echo "    -h          Print this help"
+    echo "    -v          Show x-gdb version"
+    echo "    -c          Use command mode but not tui"
+    echo "    -n          Debug normal package"
+    echo "    -f          force restart adg"
+    echo "    -a          Debug ac package"
+    echo "    -t <type>   Debug <type>(ac|normal) package" 
+    echo ""
+
+    echo "Valid package:"
+    echo "     valid packge should like \"com.ABCD.xxx\"" 
+    echo ""
+    exit 0; 
+fi 
+
+# check whether a android directory.
+# if not, will exit.
+check_in_android_directory
+
+# get package name  
+if [ -z $package ]; then 
+    package=`package_name`
+    if [ -z $package ]; then 
+       echo "Error: no package name!"
+       exit 13
+    fi 
+fi 
+
+# get activity name  
+Activity=`activity_name`
+if [ -z $Activity ]; then 
+   echo "Error: no activity name!"
+fi 
+
+# get apk name from .project file.
+APKNAME=`apk_name`
+
+# if type is empty, get it from package.
+if [ -z $PKGTYPE ]; then 
+   # check whether there is a apk in bin directory.
+   APKPATH=bin/$APKNAME
+   
+   if [ ! -f $APKPATH ]; then 
+      APKPATH=`ls bin/*.apk|tail -1`
+      if [ -z $APKPATH ]; then
+          echo "Error: no $APKNAME in directory bin, package it first!"
+          exit 3
+      fi
+   fi    
+
+   TMP_DIR="tmp_dir"
+   unzip $APKPATH -d $TMP_DIR >null 2>&1
+
+   if [ ! -d $TMP_DIR ]; then 
+     echo "Error: fail to unzip $APKNAME, we must unzip it to get package type"
+     exit 4
+   fi 
+ 
+   type_dir=`ls $TMP_DIR/lib`
+   rm -r $TMP_DIR 
+
+   if [ $type_dir = "armeabi" ]; then 
+     PKGTYPE="normal"
+   elif [ $type_dir = "armeabi-v7a" ]; then  
+     PKGTYPE="ac"
+   elif [ $type_dir = "x86" ]; then 
+     PKGTYPE="x86"
+   fi
+fi
+
+if [ $PKGTYPE = "normal" ] ; then 
+  CPU_ARCH=armeabi 
+elif [ $PKGTYPE = "ac" ]; then 
+  CPU_ARCH=armeabi-v7a
+elif [ $PKGTYPE = "x86" ] ; then 
+  CPU_ARCH=x86
+fi
+ABI=$CPU_ARCH
+
+# print pakcage informatin
+echo "apk         $APKNAME" 
+echo "package     $package" 
+echo "type        $PKGTYPE"
+echo "cpu-arch    $CPU_ARCH" 
+echo ""
+
+APP_OUT=./obj/local/$CPU_ARCH
+APP_PROCESS=$APP_OUT/app_process
+
+# check devices
+dev_state=`adb get-state`
+if [ $dev_state = "unknown" ]; then 
+  dev_count=`adb devices | sed 1d | grep device -c`
+  if [ $dev_count -eq "0" ]; then 
+     echo "error: device not found"
+  else
+     echo "error: more than one device and emulator"
+  fi
+  exit 32 
+fi  
+
+# check gdbserver in package 
+# if no gdbserver in $APP_OUT, it means this is a release package.
+# then it's need to copy gdbserver into the package on device. 
+DEBUGGABLE="YES"
+if [ ! -r "./libs/$ABI/gdbserver" ]; then 
+   echo "this is a release package" 
+   DEBUGGABLE="NO"
+   NDK_GDB=`which ndk-gdb`
+   NDK_GDB_DIR=`dirname $NDK_GDB`
+   GDBSERVER_PATH="$NDK_GDB_DIR/prebuilt/android-arm/gdbserver/gdbserver"
+   cp -f $GDBSERVER_PATH ./libs/$ABI/
+   cp -f $GDBSERVER_PATH $APP_OUT/   
+ 
+   # push gdbserver to device. 
+   adb push ./libs/$ABI/gdbserver  /sdcard/
+   adb shell su -c "cp -f /sdcard/gdbserver /data/data/$package/lib"         
+   adb shell su -c "chmod 777 /data/data/$package/lib/gdbserver"
+fi 
+
+# if no gdb.setup, create an empty file.
+if [ ! -r ".libs/$ABI/gdb.setup" ]; then 
+   echo "set solib-search-path ./obj/local/$ABI" >  ./libs/$ABI/gdb.setup 
+fi 
+
+# kill existing gdbserver on device.
+# for release package, we start by cd and ./lib/gdbser.
+GDBSERVER_PID=`pid_for_program lib/gdbserver`
+if [ "GDBSERVER_PID" = "0" ]; then 
+   GDBSERVER_PID=`pid_for_program ./lib/gdbserver`
+   if [ "$GDBSERVER_PID" != "0" ]; then 
+       echo "kill gdbserver: $GDBSERVER_PID" 
+       adb shell su -c "kill -9 $GDBSERVER_PID"
+   fi
+fi 
+
+# check whether App exists. Just attach to it if exists, or else need to start first.
+PID=`pid_for_program $package`
+if [ "$PID" = "0" ]; then
+#   run adb shell "am start -n $package/com.UCMobile.main.UCMobile"
+   run adb shell "am start -n $package/$Activity"
+   adb shell sleep 5
+   PID=`pid_for_program $package`
+fi 
+echo "$package pid: $PID"
+
+## kill process of "adb shell run-as .. lib/gdbser " on PC.
+ps ax | grep "lib/gdbserver +debug-socket" | awk '{print $1}' | xargs kill -9
+
+# start program by gdbserver, and attach to it. 
+#run adb shell run-as $package lib/gdbserver +debug-socket --attach $PID > ~/.gdb.log &
+run adb shell "run-as $package lib/gdbserver +debug-socket --attach $PID" &
+GDB_SERVER_PID=`pid_for_program lib/gdbserver`
+
+if [ "$GDB_SERVER_PID" = "0" ]; then
+   run adb shell su -c "cd /data/data/$package && ./lib/gdbserver +debug-socket --attach $PID " &
+   GDB_SERVER_PID=`pid_for_program ./lib/gdbserver`
+
+   if [ "$GDB_SERVER_PID" = "0" ]; then 
+      run adb shell "cd /data/data/$package ; su -c ./lib/gdbserver +debug-socket --attach $PID " &
+      GDB_SERVER_PID=`pid_for_program ./lib/gdbserver`
+
+      if [ "$GDB_SERVER_PID" = "0" ]; then 
+         echo "fail to start gdbserver!"
+         exit 2;
+      fi 
+   fi
+fi
+
+# wait for gdbserver attach to pid.
+sleep 3
+if [ $? != 0 ]; then
+   echo "ERROR: Could not launch gdbserver on device ?"
+   exit 1
+fi 
+
+# port redirection
+run adb forward tcp:5039 localfilesystem:/data/data/$package/debug-socket
+
+#pull files from devices
+##
+adb pull /system/bin/app_process $APP_OUT/app_process >/dev/null 2>&1
+echo "Pulled app_process from device/emulator."
+##
+adb pull /system/bin/linker $APP_OUT/linker >/dev/null 2>&1 
+echo "Pulled linker form device/emulator."
+##
+adb pull /system/lib/libc.so $APP_OUT/libc.so >/dev/null 2>&1
+echo "Pulled libc.so from device/emulator."
+
+if [ $CPU_ARCH = "x86" ]; then
+    GDB_PREFIX=i686-linux-android- 
+else 
+    GDB_PREFIX=arm-linux-androideabi-
+fi  
+
+GDBCMD=${GDB_PREFIX}gdb
+GDBSETUP=$APP_OUT/gdb.setup
+
+# print debugger informatin
+echo ""
+echo "gdb-client     $GDBCMD" 
+echo "gdb-cmd-file   $GDBSETUP"
+echo ""
+
+echo "copy ./libs/$CPU_ARCH/gdb.setup to $GDBSETUP"
+cp -f ./libs/$CPU_ARCH/gdb.setup $GDBSETUP 
+
+# generate gdb initializing commands to GDBSETUP
+echo "file $APP_PROCESS" >> $GDBSETUP
+echo "target remote :5039" >> $GDBSETUP
+echo "set print object on" >> $GDBSETUP
+echo "sharedlibrary" >> $GDBSETUP
+
+## kill adg_driver process 
+adg_driver_process=`ps| grep adg_driver -c`
+if [ $adg_driver_process -ne "0" ]; then 
+    if [ -z $FORCE_RESTART_ADG ]; then
+        echo reuse adg, you input command: target remote :5039 in adg.
+        exit 0 
+    fi
+    killall adg_driver   
+fi
+
+#^ start to process adg --- 
+## change gdb.setup into 1 line characters.
+echo "start to set adg_config.ini according to gdb.setup"
+adg_startupcommands="StartupCommands"
+tmp_file="gdb.tmp"
+cp $GDBSETUP $tmp_file 
+adg_startupcommands_value=`sed ':label;N;s/\n/\\\n/;b label' $tmp_file`
+rm $tmp_file 
+
+## check Debugger 
+echo "check Debugger for adg"
+adg_debugger="Debugger"
+adg_debugger_value=`which $GDBCMD`
+if [ -z $adg_debugger_value ]; then 
+    echo "can't find arm-linux-androideabi-gdb"
+    exit 3
+fi 
+
+### set adg_config.ini for affinic debugger gui. 
+echo "check file adg_config_file.ini"
+adg_config_file=~/.config/adg_config.ini
+
+
+ls  "$adg_config_file"
+
+if [ ! -f "$adg_config_file" ]; then 
+   echo "$adg_config_file does not exist!"
+   exit 1
+fi 
+
+sed -i '/Debugger=/d' "$adg_config_file" 
+sed -i '/StartupCommands=/d' "$adg_config_file" 
+
+echo "start to update adg_config.ini according gdb.setup"
+### set Debugger info adg_config.ini 
+echo "Debugger=$adg_debugger_value" >> "$adg_config_file"
+### set gdb start up commands into adg_config.ini
+echo "StartupCommands=$adg_startupcommands_value" >> "$adg_config_file"
+
+#^ create Affinic Debugger.ini when first start adg.  
+##
+tmp_current_path=`pwd`
+# get info config directory to operate Affinic Debugger.ini easily. 
+cd ~/.config
+#"Affinic Debugger.ini" is the config file to adg. 
+affinic_debugger_ini="Affinic Debugger.ini"
+# to generate file "Affinic Debugger.ini" 
+if [ ! -r "$affinic_debugger_ini" ]; then 
+   echo "Error: no file Affinic Debugger.ini in ~/.config directory"
+   echo "Generate Affinic Debugger.ini as follows:"
+   echo "1.start Affinic Debugger GUI: adg"
+   echo "2.close Affinic Debugger GUI" 
+   echo "3.start adgserver again     : adgserver" 
+   exit 2
+fi 
+#
+UseExternalConfig=`echo "$affinic_debugger_ini" | grep "UseExternalConfig=true"`
+if [ -z $UseExternalConfig ]; then 
+   cur_user=`whoami`
+   #set "UseExternalConfig=" to "UseExternalConfig=true" 
+   sed -i 's/UseExternalConfig/UseExternalConfig=true/' "$affinic_debugger_ini"
+   #set "ExternalConfigFile=" to "ExternalConfigFile=/home/$user/.config/adg_config.ini"
+   sed -i "s/ExternalConfigFile=.*/ExternalConfigFile=\/home\/$cur_user\/\.config\/adg_config\.ini/" "$affinic_debugger_ini"
+fi
+# recover to android working path. 
+cd $tmp_current_path
+#$
+
+# start adg 
+echo "start Affinic Debugger GUI now ..."
+adg&
+echo "success to launch adg!" 
+exit 0
