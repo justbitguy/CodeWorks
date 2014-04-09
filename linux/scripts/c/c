@@ -1,0 +1,55 @@
+#!/bin/bash
+
+USAGE="c directory"
+history_file=".c_history"
+target=""
+
+function save_dir(){
+  echo $1 >> ~/$history_file
+}
+
+function get_target(){
+   part_name=$1
+   echo "DIR: " $part_name
+ 
+   if [ $1 = ~ ]; then 
+      target=~ 
+   elif [ $1 = ".." -o $1 = "." -o `echo $1 | grep "^\/*"` ]; then 
+      target=$1
+   else
+       echo "start to grep" 
+       dir_count=`ls -l | grep -c "$part_name"` 
+       if [ $dir_count -eq 0 ]; then 
+          echo  "none contains $part_name"
+          echo  "input name more exactly!"
+       elif [ $dir_count -eq 1 ]; then 
+          target=`ls | grep "$part_name"`
+       else 
+         ls -l | grep "$part_name"
+         echo "Need a more exact directory name!"
+         exit 
+      fi
+  fi 
+}
+
+function c()
+{
+   if [ $# -eq 0 ]; then 
+      directory="" 
+   elif [ $# -eq 1 ]; then 
+      directory=$1
+   else 
+      echo $USAGE 
+      exit 
+   fi 
+
+   if [ -z $directory ]; then 
+      target=""
+   else 
+      get_target $directory 
+   fi 
+
+   cd $target 
+}
+
+c $@
