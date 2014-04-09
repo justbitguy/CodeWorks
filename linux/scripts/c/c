@@ -1,11 +1,11 @@
 #!/bin/bash
 
 USAGE="c directory"
-history_file=".c_history"
+History_File=".c_history"
 target=""
 
 function save_dir(){
-  echo $1 >> ~/$history_file
+  echo $1 >> ~/$History_File
 }
 
 function get_target(){
@@ -13,17 +13,20 @@ function get_target(){
    echo "DIR: " $part_name
  
    if [ $1 = ~ ]; then 
+      echo "main directory"
       target=~ 
-   elif [ $1 = ".." -o $1 = "." -o `echo $1 | grep "^\/*"` ]; then 
+   elif [ $1 = ".." -o $1 = "." -o `echo $1 | grep '^/'` ]; then 
+      echo ".. or . or absolute path "
       target=$1
    else
-       echo "start to grep" 
-       dir_count=`ls -l | grep -c "$part_name"` 
+       echo "start to grep"
+       dir_name=`basename $part_name`
+       dir_count=`ls -l | grep -c "$dir_name"` 
        if [ $dir_count -eq 0 ]; then 
-          echo  "none contains $part_name"
+          echo  "none contains $dir_name"
           echo  "input name more exactly!"
        elif [ $dir_count -eq 1 ]; then 
-          target=`ls | grep "$part_name"`
+          target=`ls | grep "$dir_name"`
        else 
          ls -l | grep "$part_name"
          echo "Need a more exact directory name!"
@@ -32,7 +35,7 @@ function get_target(){
   fi 
 }
 
-function c()
+function cx()
 {
    if [ $# -eq 0 ]; then 
       directory="" 
@@ -44,12 +47,13 @@ function c()
    fi 
 
    if [ -z $directory ]; then 
-      target=""
+      target=~
    else 
       get_target $directory 
    fi 
 
    cd $target 
+   save_dir $target
 }
 
-c $@
+cx $@
