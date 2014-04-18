@@ -9,51 +9,53 @@ function save_dir(){
 }
 
 function get_target(){
-   part_name=$1
-   echo "DIR: " $part_name
+   d_name=$1
+   g_name=`echo $d_name | grep "^/"` 
  
-   if [ $1 = ~ ]; then 
+   echo "DIR: " $d_name
+ 
+   if [ $d_name = ~ ]; then 
       echo "main directory"
       target=~ 
-   elif [ $1 = ".." -o $1 = "." -o `echo $1 | grep '^/'` ]; then 
+   elif [ $d_name = ".." -o $d_name = "." ]; then 
       echo ".. or . or absolute path "
       target=$1
    else
        echo "start to grep"
-       dir_name=`basename $part_name`
-       dir_count=`ls -l | grep -c "$dir_name"` 
+       
+       dir_count=`ls -l | grep -c "$d_name"` 
        if [ $dir_count -eq 0 ]; then 
-          echo  "none contains $dir_name"
+          echo  "none contains $d_name"
           echo  "input name more exactly!"
        elif [ $dir_count -eq 1 ]; then 
-          target=`ls | grep "$dir_name"`
+          target=`ls | grep "$d_name"`
        else 
-         ls -l | grep "$part_name"
+         ls -l | grep "$d_name"
          echo "Need a more exact directory name!"
-         exit 
       fi
   fi 
 }
 
-function cx()
-{
-   if [ $# -eq 0 ]; then 
-      directory="" 
-   elif [ $# -eq 1 ]; then 
-      directory=$1
-   else 
-      echo $USAGE 
-      exit 
-   fi 
 
-   if [ -z $directory ]; then 
-      target=~
-   else 
-      get_target $directory 
-   fi 
+#  script start 
 
-   cd $target 
-   save_dir $target
-}
+if [ $# -eq 0 ]; then 
+   directory="" 
+elif [ $# -eq 1 ]; then 
+   directory=$1
+else 
+   echo $USAGE 
+   exit       
+fi 
 
-cx $@
+if [ -z $directory ]; then 
+   target=~
+else 
+   get_target $directory 
+fi 
+
+
+echo "target is $target"
+cd $target 
+save_dir $target
+
