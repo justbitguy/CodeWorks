@@ -1,25 +1,25 @@
 #!/bin/bash
 #Function: as affinic debugger gui server.
-#Modified date: 2014-01-2013
-#Author: zhangjw@ucweb.com(Kyle)
+#Modified date: 2014-05-10
+#Author: justbitguy@gmail.com(Kyle)
 
-VERSION="6.1"
+VERSION="2.0"
 
 # global flag for function d_print. 
 # manually modified to "YES" when deubgging.
 ENABLE_DEBUG="NO"
 
 # global flags for debug 
-USAGE="usage: `basename $0` package [-c] [-t pkgtype]"
+USAGE="usage: `basename $0` package [-c]"
 USECMD=false
-PKGTYPE=""
 TYPE_COUNT=0
 OPTION_HELP="no"
 
 # global vars for android debug 
 MANIFEST="AndroidManifest.xml" 
 
-pid_for_program()
+#android_program_pid()
+android_program_pid()
 {
    pack_name=$1
    _pid=`adb shell ps | awk -v PACKAGE="$pack_name" '
@@ -59,7 +59,7 @@ pid_for_program()
 # run command with log
 run ()
 {
-  echo "adb cmd: $@"
+  echo "ADB CMD: $@"
   "$@" > /dev/null 2>&1 
 }
 
@@ -130,46 +130,10 @@ do
      USECMD=true
      shift
      ;;
-  -t)# 
-     if [ $TYPE_COUNT -ne 0 ]; then
-        echo $USAGE
-        exit 2
-     elif [ $2 = "ac" -o $2 = "normal" ]; then 
-        PKGTYPE=$2 
-        TYPE_COUNT=`expr $TYPE_COUNT + 1`
-        echo "$PKGTYPE package"
-        shift
-        shift
-     else
-        echo "#error: $2 is a wrong package type!"
-        exit 2
-     fi 
-     ;;
-   -a)#
-     if [ $TYPE_COUNT -eq 0 ]; then
-       echo "AC package" PKGTYPE=ac
-       TYPE_COUNT=`expr $TYPE_COUNT + 1`
-       shift
-     else
-       echo $USAGE
-       exit 2
-     fi
-     ;;
    -f)#
      echo force restart adg.
      shift
      FORCE_RESTART_ADG=1
-     ;;
-   -n)#
-     if [ $TYPE_COUNT -eq 0 ]; then 
-        echo "Normal package"
-        PKGTYPE=normal
-        TYPE_COUNT=`expr $TYPE_COUNT + 1`
-        shift
-     else 
-        echo $USAGE
-        exit 2
-     fi
      ;;
    -v)#
      echo "`basename $0` $VERSION"
@@ -195,7 +159,7 @@ do
 done
 
 ## print help 
-PROGNAME=x-gdb
+PROGNAME=adgserver
 if [ "$OPTION_HELP" = "yes" ] ; then 
     echo "Usage: $PROGNAME [options] [pakcage]"
     echo ""
@@ -238,53 +202,43 @@ fi
 # get apk name from .project file.
 APKNAME=`apk_name`
 
-# if type is empty, get it from package.
-if [ -z $PKGTYPE ]; then 
-   # check whether there is a apk in bin directory.
-   APKPATH=bin/$APKNAME
-   
-   if [ ! -f $APKPATH ]; then 
-      APKPATH=`ls bin/*.apk|tail -1`
-      if [ -z $APKPATH ]; then
-          echo "Error: no $APKNAME in directory bin, package it first!"
-          exit 3
-      fi
-   fi    
+# check whether there is a apk in bin directory.
+APKPATH=bin/$APKNAME
 
-   TMP_DIR="tmp_dir"
-   unzip $APKPATH -d $TMP_DIR >null 2>&1
-
-   if [ ! -d $TMP_DIR ]; then 
-     echo "Error: fail to unzip $APKNAME, we must unzip it to get package type"
-     exit 4
-   fi 
- 
-   type_dir=`ls $TMP_DIR/lib`
-   rm -r $TMP_DIR 
-
-   if [ $type_dir = "armeabi" ]; then 
-     PKGTYPE="normal"
-   elif [ $type_dir = "armeabi-v7a" ]; then  
-     PKGTYPE="ac"
-   elif [ $type_dir = "x86" ]; then 
-     PKGTYPE="x86"
+if [ ! -f $APKPATH ]; then 
+   APKPATH=`ls bin/*.apk|tail -1`
+   if [ -z $APKPATH ]; then
+       echo "Error: no $APKNAME in directory bin, package it first!"
+       exit 3
    fi
+fi    
+
+#get cpu arch and libs directory.
+TMP_DIR="tmp_dir"
+unzip $APKPATH -d $TMP_DIR >null 2>&1
+
+if [ ! -d $TMP_DIR ]; then 
+  echo "Error: fail to unzip $APKNAME, we must unzip it to get package type"
+  exit 4
+fi 
+#
+type_dir=`ls $TMP_DIR/lib`
+rm -r $TMP_DIR 
+#
+if [ $type_dir = "armeabi" ]; then 
+  CPU_ARCH="armeabi"
+elif [ $type_dir = "armeabi-v7a" ]; then  
+  CPU_ARCH="armeabi-v7a"
+elif [ $type_dir = "x86" ]; then 
+  CPU_ARCH="x86"
 fi
 
-if [ $PKGTYPE = "normal" ] ; then 
-  CPU_ARCH=armeabi 
-elif [ $PKGTYPE = "ac" ]; then 
-  CPU_ARCH=armeabi-v7a
-elif [ $PKGTYPE = "x86" ] ; then 
-  CPU_ARCH=x86
-fi
 ABI=$CPU_ARCH
 
 # print pakcage informatin
-echo "apk         $APKNAME" 
-echo "package     $package" 
-echo "type        $PKGTYPE"
-echo "cpu-arch    $CPU_ARCH" 
+echo "APK         $APKNAME" 
+echo "Package     $package" 
+echo "CPU-ARCH    $CPU_ARCH" 
 echo ""
 
 APP_OUT=./obj/local/$CPU_ARCH
@@ -292,7 +246,7 @@ APP_PROCESS=$APP_OUT/app_process
 
 # check devices
 dev_state=`adb get-state`
-if [ $dev_state = "unknown" ]; then 
+if [ "$dev_state" = "unknown" ]; then 
   dev_count=`adb devices | sed 1d | grep device -c`
   if [ $dev_count -eq "0" ]; then 
      echo "error: device not found"
@@ -307,7 +261,7 @@ fi
 # then it's need to copy gdbserver into the package on device. 
 DEBUGGABLE="YES"
 if [ ! -r "./libs/$ABI/gdbserver" ]; then 
-   echo "this is a release package" 
+   echo "This is a release package" 
    DEBUGGABLE="NO"
    NDK_GDB=`which ndk-gdb`
    NDK_GDB_DIR=`dirname $NDK_GDB`
@@ -327,10 +281,13 @@ if [ ! -r ".libs/$ABI/gdb.setup" ]; then
 fi 
 
 # kill existing gdbserver on device.
-# for release package, we start by cd and ./lib/gdbser.
-GDBSERVER_PID=`pid_for_program lib/gdbserver`
-if [ "GDBSERVER_PID" = "0" ]; then 
-   GDBSERVER_PID=`pid_for_program ./lib/gdbserver`
+# for release package, we start by cd and ./lib/gdbserver.
+GDBSERVER_PID=`android_program_pid lib/gdbserver`
+# 
+if [ "GDBSERVER_PID" != "0" ]; then 
+   adb shell su -c "kill -9 $GDBSERVER_PID"  
+elif [ "GDBSERVER_PID" = "0" ]; then 
+   GDBSERVER_PID=`android_program_pid ./lib/gdbserver`
    if [ "$GDBSERVER_PID" != "0" ]; then 
        echo "kill gdbserver: $GDBSERVER_PID" 
        adb shell su -c "kill -9 $GDBSERVER_PID"
@@ -338,14 +295,13 @@ if [ "GDBSERVER_PID" = "0" ]; then
 fi 
 
 # check whether App exists. Just attach to it if exists, or else need to start first.
-PID=`pid_for_program $package`
+PID=`android_program_pid $package`
 if [ "$PID" = "0" ]; then
-#   run adb shell "am start -n $package/com.UCMobile.main.UCMobile"
    run adb shell "am start -n $package/$Activity"
    adb shell sleep 5
-   PID=`pid_for_program $package`
+   PID=`android_program_pid $package`
 fi 
-echo "$package pid: $PID"
+echo "Pid of package $package: $PID"
 
 ## kill process of "adb shell run-as .. lib/gdbser " on PC.
 ps ax | grep "lib/gdbserver +debug-socket" | awk '{print $1}' | xargs kill -9
@@ -353,16 +309,16 @@ ps ax | grep "lib/gdbserver +debug-socket" | awk '{print $1}' | xargs kill -9
 # start program by gdbserver, and attach to it. 
 #run adb shell run-as $package lib/gdbserver +debug-socket --attach $PID > ~/.gdb.log &
 run adb shell "run-as $package lib/gdbserver +debug-socket --attach $PID" &
-GDB_SERVER_PID=`pid_for_program lib/gdbserver`
+GDB_SERVER_PID=`android_program_pid lib/gdbserver`
 
 if [ "$GDB_SERVER_PID" = "0" ]; then
    run adb shell su -c "cd /data/data/$package && ./lib/gdbserver +debug-socket --attach $PID " &
-   GDB_SERVER_PID=`pid_for_program ./lib/gdbserver`
+   GDB_SERVER_PID=`android_program_pid ./lib/gdbserver`
 
    if [ "$GDB_SERVER_PID" = "0" ]; then 
       run adb shell "cd /data/data/$package ; su -c ./lib/gdbserver +debug-socket --attach $PID " &
-      GDB_SERVER_PID=`pid_for_program ./lib/gdbserver`
-
+      GDB_SERVER_PID=`android_program_pid ./lib/gdbserver`
+      echo $GDB_SERVER_PID
       if [ "$GDB_SERVER_PID" = "0" ]; then 
          echo "fail to start gdbserver!"
          exit 2;
@@ -402,11 +358,11 @@ GDBSETUP=$APP_OUT/gdb.setup
 
 # print debugger informatin
 echo ""
-echo "gdb-client     $GDBCMD" 
-echo "gdb-cmd-file   $GDBSETUP"
+echo "GDB CLIENT:  $GDBCMD" 
+echo "SETUP FILE:  $GDBSETUP"
 echo ""
 
-echo "copy ./libs/$CPU_ARCH/gdb.setup to $GDBSETUP"
+#echo "copy ./libs/$CPU_ARCH/gdb.setup to $GDBSETUP"
 cp -f ./libs/$CPU_ARCH/gdb.setup $GDBSETUP 
 
 # generate gdb initializing commands to GDBSETUP
@@ -414,15 +370,16 @@ echo "file $APP_PROCESS" >> $GDBSETUP
 echo "target remote :5039" >> $GDBSETUP
 echo "set print object on" >> $GDBSETUP
 echo "sharedlibrary" >> $GDBSETUP
+echo "info program" >> $GDBSETUP
 
 ## kill adg_driver process 
 adg_driver_process=`ps| grep adg_driver -c`
 if [ $adg_driver_process -ne "0" ]; then 
     if [ -z $FORCE_RESTART_ADG ]; then
-        echo reuse adg, you input command: target remote :5039 in adg.
+        echo ADG resused, input in adg \"target remote :5039\"
         exit 0 
     fi
-    killall adg_driver   
+    killall adg_driver >/dev/null 2>&1 
 fi
 
 #^ start to process adg --- 
@@ -444,11 +401,11 @@ if [ -z $adg_debugger_value ]; then
 fi 
 
 ### set adg_config.ini for affinic debugger gui. 
-echo "check file adg_config_file.ini"
+echo "check file adg config file"
 adg_config_file=~/.config/adg_config.ini
 
 
-ls  "$adg_config_file"
+echo adg config file path: $(ls  "$adg_config_file")
 
 if [ ! -f "$adg_config_file" ]; then 
    echo "$adg_config_file does not exist!"
@@ -495,6 +452,6 @@ cd $tmp_current_path
 
 # start adg 
 echo "start Affinic Debugger GUI now ..."
-adg&
+adg& >/dev/null 2>&1 
 echo "success to launch adg!" 
 exit 0
