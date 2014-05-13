@@ -161,21 +161,18 @@ done
 ## print help 
 PROGNAME=adgserver
 if [ "$OPTION_HELP" = "yes" ] ; then 
-    echo "Usage: $PROGNAME [options] [pakcage]"
+    echo "Usage: $PROGNAME [options] [package]"
     echo ""
     echo "Valid options:"
     echo ""
     echo "    -h          Print this help"
     echo "    -v          Show x-gdb version"
     echo "    -c          Use command mode but not tui"
-    echo "    -n          Debug normal package"
     echo "    -f          force restart adg"
-    echo "    -a          Debug ac package"
-    echo "    -t <type>   Debug <type>(ac|normal) package" 
     echo ""
 
     echo "Valid package:"
-    echo "     valid packge should like \"com.ABCD.xxx\"" 
+    echo "     valid package should like \"com.ABCD.xxx\"" 
     echo ""
     exit 0; 
 fi 
