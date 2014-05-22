@@ -1,9 +1,9 @@
 #!/bin/bash
 #Function: as affinic debugger gui server.
-#Modified date: 2014-05-10
+#Modified date: 2014-05-15
 #Author: justbitguy@gmail.com(Kyle)
 
-VERSION="2.0"
+VERSION="2.1"
 
 # global flag for function d_print. 
 # manually modified to "YES" when deubgging.
@@ -123,32 +123,27 @@ function apk_name(){
 #^ start of this script
 #
 ## process options 
-while [ $# -gt 0 ]
+while getopts :cfvh OPTION 
 do 
-  case $1 in 
-  -c)# 
+  case $OPTION in 
+   c)# 
      USECMD=true
-     shift
      ;;
-   -f)#
+   f)#
      echo force restart adg.
-     shift
      FORCE_RESTART_ADG=1
      ;;
-   -v)#
+   v)#
      echo "`basename $0` $VERSION"
      exit 0
-     shift
      ;;
-   -h)#
+   h)#
      OPTION_HELP="yes"
-     shift      
      ;;
-  *)#
+   \?)#
      STR=`echo $1 | grep "^com.*"`
      if [ ! -z $STR ]; then 
         package=$1
-        shift
      else
 	echo $USAGE
         echo "#error: package should like com.XXX..."
@@ -161,13 +156,13 @@ done
 ## print help 
 PROGNAME=adgserver
 if [ "$OPTION_HELP" = "yes" ] ; then 
-    echo "Usage: $PROGNAME [options] [package]"
+    echo "Usage: $PROGNAME [-cfvh] [package]"
     echo ""
     echo "Valid options:"
     echo ""
     echo "    -h          Print this help"
-    echo "    -v          Show x-gdb version"
-    echo "    -c          Use command mode but not tui"
+    echo "    -v          Show adgserver version"
+    echo "    -c          Use gdb command mode but not gui"
     echo "    -f          force restart adg"
     echo ""
 
@@ -318,6 +313,7 @@ if [ "$GDB_SERVER_PID" = "0" ]; then
       echo $GDB_SERVER_PID
       if [ "$GDB_SERVER_PID" = "0" ]; then 
          echo "fail to start gdbserver!"
+         echo "Do you install package $package?"
          exit 2;
       fi 
    fi
@@ -368,6 +364,16 @@ echo "target remote :5039" >> $GDBSETUP
 echo "set print object on" >> $GDBSETUP
 echo "sharedlibrary" >> $GDBSETUP
 echo "info program" >> $GDBSETUP
+
+# if has option [-c], just gdb started but not adg.
+if [ "$USECMD" = "true" ]; then 
+   echo "Just start gdb as debugger!"
+   echo "" 
+   $GDBCMD -x $GDBSETUP 
+   exit 0 
+fi 
+
+## the following steps is trying to start adg ....
 
 ## kill adg_driver process 
 adg_driver_process=`ps| grep adg_driver -c`
