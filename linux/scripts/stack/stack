@@ -1,0 +1,50 @@
+#!/bin/sh 
+#by chogri(justbitguy@gmail.com)
+#to format xcode stack data 
+#2014-10-16
+
+stackfile="sfile"
+format=""
+
+while [ $# -gt 0 ] 
+do 
+   case $1 in 
+       -a)#
+         if [ "$format" = "" ];then 
+	    format="a"  
+	 else 
+	    echo $USAGE 
+	    exit 1
+	 fi 
+	 shift 
+	 ;; 
+       -b)#
+         if [ "$format" = "" ];then 
+	    format="b" 
+	    shift 
+	 else 
+	    echo $USAGE 
+	    exit 1
+	 fi 
+	 shift 
+	 ;;
+      	*)#
+          stackfile=$1
+	  shift
+	  ;; 
+   esac 
+done 
+
+out="$stackfile.stk" 
+case $format in 
+     a)#
+         cat $stackfile | sed 's/0x.* in //' | sed 's/,.*)/, ...)/' | sed 's/at \/.*\// /' |tee $out 
+         ;;
+     b)#
+         cat $stackfile | sed 's/0x.* in //' | sed 's/,.*)/, ...)/' | sed 's/at .*$//' | tee $out 
+         ;;
+     "")#
+         cat $stackfile | sed 's/0x.* in //' | sed 's/at \/.*\// /' | tee $out 
+         ;;
+esac 
+
